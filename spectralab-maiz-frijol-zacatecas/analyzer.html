@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpectraLab — Análisis Gamma</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.0/math.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg:        #080c10;
+  --bg2:       #0d1117;
+  --bg3:       #111820;
+  --panel:     #131c26;
+  --border:    #1e2d3d;
+  --accent:    #00d4ff;
+  --accent2:   #00ff99;
+  --accent3:   #ff6b35;
+  --warn:      #ffcc00;
+  --text:      #c9d8e8;
+  --text2:     #6b8aaa;
+  --text3:     #3d5570;
+  --success:   #00ff99;
+  --danger:    #ff4466;
+  --glow:      0 0 20px rgba(0,212,255,0.15);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Rajdhani', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Grid background */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events:none; z-index:0;
+}
+
+/* ── HEADER ── */
+header {
+  position: relative; z-index:10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, #080c10 0%, #0d1520 50%, #080c10 100%);
+}
+.logo {
+  display: flex; align-items: center; gap: 12px;
+}
+.logo-icon {
+  width: 36px; height: 36px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--glow);
+}
+.logo-icon svg { width:20px; height:20px; }
+.logo-text {
+  font-family: 'Space Mono', monospace;
+  font-size: 18px; font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-shadow: 0 0 20px rgba(0,212,255,0.5);
+}
+.logo-sub { font-size: 11px; color: var(--text2); letter-spacing: 3px; text-transform: uppercase; }
+.header-status {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px; color: var(--text2);
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text3);
+  transition: all 0.3s;
+}
+.status-dot.active { background: var(--success); box-shadow: 0 0 8px var(--success); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+/* ── MAIN LAYOUT ── */
+main {
+  position: relative; z-index:1;
+  max-width: 1400px; margin: 0 auto;
+  padding: 24px 32px;
+  display: flex; flex-direction: column; gap: 24px;
+}
+
+/* ── DROP ZONE ── */
+.drop-section {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.drop-zone {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: var(--panel);
+  position: relative; overflow: hidden;
+}
+.drop-zone::before {
+  content:''; position:absolute; inset:0;
+  background: linear-gradient(135deg, transparent 60%, rgba(0,212,255,0.03));
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent);
+  box-shadow: var(--glow);
+  background: #0f1c2a;
+}
+.drop-zone.loaded {
+  border-color: var(--accent2);
+  border-style: solid;
+}
+.drop-zone.loaded::after {
+  content:'✓';
+  position:absolute; top:8px; right:12px;
+  color: var(--accent2); font-size: 14px; font-weight:700;
+}
+.drop-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; letter-spacing: 2px;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.drop-type {
+  font-size: 13px; color: var(--text2);
+  margin-bottom: 4px;
+}
+.drop-file-name {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--accent2);
+  margin-top: 6px; word-break: break-all;
+}
+.drop-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.4; }
+input[type=file] { display:none; }
+
+/* ── CONFIG ROW ── */
+.config-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 16px; align-items: end;
+}
+.field-group { display: flex; flex-direction: column; gap: 6px; }
+.field-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; color: var(--text2);
+  letter-spacing: 1.5px; text-transform: uppercase;
+}
+.field-input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+.field-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--glow); }
+
+.btn-analyze {
+  padding: 10px 28px;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-family: 'Space Mono', monospace;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  position: relative; overflow: hidden;
+  white-space: nowrap;
+}
+.btn-analyze::before {
+  content:'';
+  position:absolute; inset:0;
+  background: var(--accent);
+  transform: translateX(-100%);
+  transition: transform 0.3s;
+  opacity: 0.1;
+}
+.btn-analyze:hover::before { transform: translateX(0); }
+.btn-analyze:hover { box-shadow: var(--glow); }
+.btn-analyze:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── PANEL ── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, #0d1520, var(--panel));
+}
+.panel-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px; letter-spacing: 2px;
+  color: var(--accent); text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-title::before {
+  content:''; width:3px; height:14px;
+  background: var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--accent);
+}
+.panel-body { padding: 20px; }
+
+/* ── METRICS ROW ── */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.metric-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  position: relative;
+}
+.metric-card::after {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:2px;
+  background: var(--accent);
+  border-radius: 6px 6px 0 0;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.metric-card.active::after { opacity:1; }
+.metric-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; color: var(--text3);
+  letter-spacing: 1px; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.metric-value {
+  font-family: 'Space Mono', monospace;
+  font-size: 18px; font-weight: 700;
+  color: var(--text);
+}
+.metric-unit {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; color: var(--text2);
+  margin-top: 2px;
+}
+
+/* ── CHARTS ── */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.chart-wrap { position: relative; height: 280px; }
+canvas { border-radius: 4px; }
+
+/* ── CALIBRATION TABLE ── */
+.cal-table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+}
+th {
+  padding: 10px 14px;
+  background: var(--bg3);
+  color: var(--text2);
+  text-align: left;
+  font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(30,45,61,0.5);
+  color: var(--text);
+}
+tr:hover td { background: rgba(0,212,255,0.03); }
+.badge {
+  display: inline-block;
+  padding: 2px 8px; border-radius: 3px;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 1px;
+}
+.badge-ok  { background: rgba(0,255,153,0.15); color: var(--accent2); border: 1px solid rgba(0,255,153,0.3); }
+.badge-warn{ background: rgba(255,204,0,0.15);  color: var(--warn);    border: 1px solid rgba(255,204,0,0.3); }
+.badge-bad { background: rgba(255,68,102,0.15); color: var(--danger);  border: 1px solid rgba(255,68,102,0.3); }
+
+/* ── PROGRESS ── */
+.progress-bar-wrap {
+  height: 4px; background: var(--bg3);
+  border-radius: 2px; overflow: hidden; margin: 8px 0;
+}
+.progress-bar {
+  height: 100%; background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* ── LOG ── */
+.log-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--text2);
+  height: 120px; overflow-y: auto;
+  line-height: 1.8;
+}
+.log-box .log-ok   { color: var(--accent2); }
+.log-box .log-warn { color: var(--warn); }
+.log-box .log-err  { color: var(--danger); }
+.log-box .log-info { color: var(--accent); }
+
+/* ── RESULTS PEAKS ── */
+.peaks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.peak-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  position: relative;
+  transition: all 0.2s;
+}
+.peak-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--glow);
+}
+.peak-nuclide {
+  font-family: 'Space Mono', monospace;
+  font-size: 15px; font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.peak-parent {
+  font-size: 11px; color: var(--text2);
+  margin-bottom: 10px;
+}
+.peak-stat { display: flex; justify-content: space-between; margin-top: 4px; }
+.peak-stat-label { font-size: 11px; color: var(--text3); }
+.peak-stat-val { font-family: 'Share Tech Mono', monospace; font-size: 12px; color: var(--text); }
+
+/* ── HIDDEN ── */
+.hidden { display: none !important; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="1.5">
+        <path d="M3 12h2l3-8 4 16 3-10 2 2h4"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">SPECTRALAB</div>
+      <div class="logo-sub">Gamma Spectrometry Analyzer</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">AGUARDANDO ARCHIVOS</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- DROP ZONES -->
+  <div class="drop-section">
+    <div class="drop-zone" id="dz-sample" onclick="document.getElementById('fi-sample').click()">
+      <div ondragover="handleDragOver(event,'dz-sample')" ondragleave="handleDragLeave(event,'dz-sample')" ondrop="handleDrop(event,'sample')"></div>
+      <div class="drop-icon">⚗️</div>
+      <div class="drop-label">ARCHIVO 1</div>
+      <div class="drop-type">Muestra (Jerez)</div>
+      <div class="drop-file-name" id="fn-sample">Arrastra o haz clic — .mca</div>
+      <input type="file" id="fi-sample" accept=".mca,.txt" onchange="loadFile(event,'sample')">
+    </div>
+    <div class="drop-zone" id="dz-bg" onclick="document.getElementById('fi-bg').click()">
+      <div ondragover="handleDragOver(event,'dz-bg')" ondragleave="handleDragLeave(event,'dz-bg')" ondrop="handleDrop(event,'bg')"></div>
+      <div class="drop-icon">📦</div>
+      <div class="drop-label">ARCHIVO 2</div>
+      <div class="drop-type">Ruido de Fondo (Carton)</div>
+      <div class="drop-file-name" id="fn-bg">Arrastra o haz clic — .mca</div>
+      <input type="file" id="fi-bg" accept=".mca,.txt" onchange="loadFile(event,'bg')">
+    </div>
+    <div class="drop-zone" id="dz-std" onclick="document.getElementById('fi-std').click()">
+      <div ondragover="handleDragOver(event,'dz-std')" ondragleave="handleDragLeave(event,'dz-std')" ondrop="handleDrop(event,'std')"></div>
+      <div class="drop-icon">🔬</div>
+      <div class="drop-label">ARCHIVO 3 (opcional)</div>
+      <div class="drop-type">Estándar IAEA-434</div>
+      <div class="drop-file-name" id="fn-std">Arrastra o haz clic — .mca</div>
+      <input type="file" id="fi-std" accept=".mca,.txt" onchange="loadFile(event,'std')">
+    </div>
+  </div>
+
+  <!-- CONFIG -->
+  <div class="config-row">
+    <div class="field-group">
+      <label class="field-label">Masa de muestra (g)</label>
+      <input class="field-input" id="cfg-mass" type="number" value="250" min="0.1" step="0.1">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Nombre de muestra</label>
+      <input class="field-input" id="cfg-name" type="text" value="Muestra">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Ventana de pico (canales)</label>
+      <input class="field-input" id="cfg-window" type="number" value="25" min="5" max="60">
+    </div>
+    <button class="btn-analyze" id="btnAnalyze" onclick="runAnalysis()" disabled>▶ ANALIZAR</button>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">CONSOLA DE PROCESO</span>
+      <div class="progress-bar-wrap" style="width:200px">
+        <div class="progress-bar" id="progressBar" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:12px 20px">
+      <div class="log-box" id="logBox">
+        <span class="log-info">// SpectraLab v1.0 — listo para análisis</span><br>
+        <span class="log-info">// Carga los archivos .mca para comenzar</span><br>
+      </div>
+    </div>
+  </div>
+
+  <!-- METRICS -->
+  <div id="section-metrics" class="hidden">
+    <div class="metrics-row">
+      <div class="metric-card active" id="mc-lt"><div class="metric-label">Live Time</div><div class="metric-value" id="mv-lt">—</div><div class="metric-unit">segundos</div></div>
+      <div class="metric-card active" id="mc-bg"><div class="metric-label">Live Time Fondo</div><div class="metric-value" id="mv-bg">—</div><div class="metric-unit">segundos</div></div>
+      <div class="metric-card" id="mc-cal"><div class="metric-label">RMS Calibración</div><div class="metric-value" id="mv-cal">—</div><div class="metric-unit">keV</div></div>
+      <div class="metric-card" id="mc-net"><div class="metric-label">Cuentas Netas</div><div class="metric-value" id="mv-net">—</div><div class="metric-unit">total</div></div>
+      <div class="metric-card" id="mc-peaks"><div class="metric-label">Picos Detect.</div><div class="metric-value" id="mv-peaks">—</div><div class="metric-unit">radionúclidos</div></div>
+    </div>
+  </div>
+
+  <!-- CHART: Muestra vs Fondo -->
+  <div id="section-charts1" class="hidden">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">ESPECTROS BRUTOS — Muestra vs. Fondo Normalizado</span></div>
+      <div class="panel-body">
+        <div class="chart-wrap"><canvas id="chartRaw"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARTS: Neto + Calibración -->
+  <div id="section-charts2" class="hidden">
+    <div class="charts-grid">
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">ESPECTRO NETO</span></div>
+        <div class="panel-body">
+          <div class="chart-wrap"><canvas id="chartNet"></canvas></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">CURVA DE CALIBRACIÓN</span></div>
+        <div class="panel-body">
+          <div class="chart-wrap"><canvas id="chartCal"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CALIBRATION TABLE -->
+  <div id="section-caltable" class="hidden">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">TABLA DE CALIBRACIÓN — Canal → Energía</span></div>
+      <div class="panel-body">
+        <div style="margin-bottom:12px; font-family:'Share Tech Mono',monospace; font-size:13px; color:var(--accent)">
+          <span id="cal-eq">—</span>
+        </div>
+        <div class="cal-table-wrap">
+          <table id="calTable">
+            <thead><tr><th>Punto</th><th>Canal</th><th>E real (keV)</th><th>E calculada (keV)</th><th>Residuo (keV)</th><th>Estado</th></tr></thead>
+            <tbody id="calTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PEAKS -->
+  <div id="section-peaks" class="hidden">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">PICOS IDENTIFICADOS</span></div>
+      <div class="panel-body">
+        <div class="peaks-grid" id="peaksGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PEAKS TABLE -->
+  <div id="section-peaktable" class="hidden">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">TABLA DE RESULTADOS DETALLADA</span></div>
+      <div class="panel-body">
+        <div class="cal-table-wrap">
+          <table id="peakTable">
+            <thead><tr><th>Radionúclido</th><th>Serie</th><th>E real (keV)</th><th>E ajustada (keV)</th><th>Canal</th><th>FWHM (keV)</th><th>Área neta</th><th>±</th><th>Estado</th></tr></thead>
+            <tbody id="peakTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ═══════════════════════════════════════════════════
+const state = { sample:null, bg:null, std:null };
+let charts = {};
+
+// ═══════════════════════════════════════════════════
+// UTILIDADES LOG
+// ═══════════════════════════════════════════════════
+function log(msg, type='') {
+  const box = document.getElementById('logBox');
+  const cls = type ? `log-${type}` : '';
+  const ts = new Date().toLocaleTimeString('es','');
+  box.innerHTML += `<span class="${cls}">[${ts}] ${msg}</span><br>`;
+  box.scrollTop = box.scrollHeight;
+}
+function setProgress(p) {
+  document.getElementById('progressBar').style.width = p+'%';
+}
+function setStatus(text, active=false) {
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('statusDot').className = 'status-dot' + (active?' active':'');
+}
+
+// ═══════════════════════════════════════════════════
+// DRAG & DROP
+// ═══════════════════════════════════════════════════
+function handleDragOver(e,id) { e.preventDefault(); document.getElementById(id).classList.add('drag-over'); }
+function handleDragLeave(e,id) { document.getElementById(id).classList.remove('drag-over'); }
+function handleDrop(e, key) {
+  e.preventDefault();
+  const idMap = {sample:'dz-sample', bg:'dz-bg', std:'dz-std'};
+  document.getElementById(idMap[key]).classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if(f) processFile(f, key);
+}
+function loadFile(e, key) { if(e.target.files[0]) processFile(e.target.files[0], key); }
+
+function processFile(file, key) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const parsed = parseMCA(ev.target.result);
+    state[key] = parsed;
+    const idMap = {sample:'dz-sample', bg:'dz-bg', std:'dz-std'};
+    const fnMap = {sample:'fn-sample', bg:'fn-bg', std:'fn-std'};
+    document.getElementById(idMap[key]).classList.add('loaded');
+    document.getElementById(fnMap[key]).textContent = file.name;
+    log(`Cargado: ${file.name} — ${parsed.data.length} canales, LT=${parsed.liveTime.toFixed(0)}s`, 'ok');
+    checkReady();
+  };
+  reader.readAsText(file);
+}
+
+function checkReady() {
+  const ready = state.sample && state.bg;
+  document.getElementById('btnAnalyze').disabled = !ready;
+  if(ready) {
+    setStatus('LISTO PARA ANALIZAR', true);
+    log('Archivos listos. Presiona ANALIZAR para continuar.', 'info');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// PARSER MCA
+// ═══════════════════════════════════════════════════
+function parseMCA(text) {
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  const meta = {}; const calPts = []; const data = [];
+  let inData=false, inCal=false;
+  for(let line of lines) {
+    line = line.trim();
+    if(line.includes('<<DATA>>')) { inData=true; inCal=false; continue; }
+    if(line.includes('<<END>>'))  { inData=false; continue; }
+    if(line.includes('<<CALIBRATION>>')) { inCal=true; continue; }
+    if(line.startsWith('<<')) { inCal=false; }
+    if(inData) { const v=parseInt(line); if(!isNaN(v)) data.push(v); }
+    else if(inCal) {
+      const parts=line.trim().split(/\s+/);
+      if(parts.length===2) { const ch=parseInt(parts[0]); const en=parseFloat(parts[1]); if(!isNaN(ch)&&!isNaN(en)) calPts.push([ch,en]); }
+    } else if(line.includes(' - ')) {
+      const idx=line.indexOf(' - ');
+      meta[line.slice(0,idx).trim()] = line.slice(idx+3).trim();
+    }
+  }
+  return {
+    liveTime: parseFloat(meta['LIVE_TIME']||'0'),
+    realTime: parseFloat(meta['REAL_TIME']||'0'),
+    startTime: meta['START_TIME']||'',
+    calPts, data
+  };
+}
+
+// ═══════════════════════════════════════════════════
+// CALIBRACIÓN LINEAL
+// ═══════════════════════════════════════════════════
+function linearFit(xs, ys) {
+  const n=xs.length;
+  const sx=xs.reduce((a,b)=>a+b,0), sy=ys.reduce((a,b)=>a+b,0);
+  const sxx=xs.reduce((a,b)=>a+b*b,0), sxy=xs.reduce((s,x,i)=>s+x*ys[i],0);
+  const a=(n*sxy-sx*sy)/(n*sxx-sx*sx);
+  const b=(sy-a*sx)/n;
+  const pred=xs.map(x=>a*x+b);
+  const rms=Math.sqrt(ys.reduce((s,y,i)=>s+(y-pred[i])**2,0)/n);
+  return {a,b,rms};
+}
+
+// ═══════════════════════════════════════════════════
+// AJUSTE GAUSSIANO simple (centroide por interpolación)
+// ═══════════════════════════════════════════════════
+function fitGaussian(data, center, window) {
+  const lo=Math.max(0,center-window), hi=Math.min(data.length,center+window);
+  const seg=data.slice(lo,hi);
+  const bg=Math.min(...seg.slice(0,5), ...seg.slice(-5));
+  const net=seg.map(v=>Math.max(0,v-bg));
+  const total=net.reduce((a,b)=>a+b,0);
+  if(total<=0) return {centroid:center, fwhm:0, area:0, areaErr:Math.sqrt(seg.reduce((a,b)=>a+b,0))};
+  const centroid=net.reduce((s,v,i)=>s+v*(lo+i),0)/total;
+  const variance=net.reduce((s,v,i)=>s+v*(lo+i-centroid)**2,0)/total;
+  const sigma=Math.sqrt(variance);
+  const fwhm=sigma*2.355;
+  const bgPerCh=bg;
+  const areaErr=Math.sqrt(total+2*window*bgPerCh);
+  return {centroid, fwhm, area:total, areaErr};
+}
+
+// ═══════════════════════════════════════════════════
+// ANÁLISIS PRINCIPAL
+// ═══════════════════════════════════════════════════
+async function runAnalysis() {
+  document.getElementById('btnAnalyze').disabled = true;
+  setStatus('PROCESANDO...', true);
+  setProgress(5);
+
+  const S = state.sample, B = state.bg;
+  const mass = parseFloat(document.getElementById('cfg-mass').value) || 250;
+  const win  = parseInt(document.getElementById('cfg-window').value) || 25;
+  const sampleName = document.getElementById('cfg-name').value || 'Muestra';
+
+  log('─────────────────────────────────', 'info');
+  log(`Iniciando análisis: ${sampleName}`, 'info');
+  log(`Live time muestra : ${S.liveTime.toFixed(1)} s  (${(S.liveTime/3600).toFixed(2)} h)`);
+  log(`Live time fondo   : ${B.liveTime.toFixed(1)} s  (${(B.liveTime/3600).toFixed(2)} h)`);
+  setProgress(15);
+
+  // ── Espectro neto ──
+  const factor = S.liveTime / B.liveTime;
+  const nCh = Math.min(S.data.length, B.data.length);
+  const netData = new Array(nCh);
+  for(let i=0;i<nCh;i++) netData[i] = Math.max(0, S.data[i] - B.data[i]*factor);
+  const totalNet = netData.reduce((a,b)=>a+b,0);
+  log(`Factor normaliz.  : ${factor.toFixed(4)}`, 'ok');
+  log(`Cuentas netas     : ${totalNet.toFixed(0)}`, 'ok');
+  setProgress(30);
+
+  // ── Calibración ──
+  // Usar puntos internos del fondo (Carton) si existen, si no los de la muestra
+  let calSource = (B.calPts.length>=2) ? B.calPts : (S.calPts.length>=2 ? S.calPts : null);
+
+  // Picos de referencia conocidos para verificar/extender calibración
+  const refPeaks = [
+    {energy:511.0,  name:'e⁺',    win:20},
+    {energy:1460.83,name:'⁴⁰K',   win:25},
+    {energy:2614.51,name:'²⁰⁸Tl', win:25},
+    {energy:609.31, name:'²¹⁴Bi', win:20},
+    {energy:1764.49,name:'²¹⁴Bi', win:20},
+  ];
+
+  let calCh=[], calEn=[];
+  if(calSource && calSource.length>=2) {
+    calCh = calSource.map(p=>p[0]);
+    calEn = calSource.map(p=>p[1]);
+    log(`Puntos cal. internos: ${calSource.length} puntos`, 'ok');
+  } else {
+    log('Sin calibración interna, usando picos de referencia del espectro', 'warn');
+  }
+
+  // Rough fit para buscar picos
+  let roughA=0.71, roughB=4;
+  if(calCh.length>=2) { const f=linearFit(calCh,calEn); roughA=f.a; roughB=f.b; }
+
+  // Buscar picos de referencia en espectro neto
+  for(const rp of refPeaks) {
+    const chEst = Math.round((rp.energy - roughB)/roughA);
+    if(chEst<0||chEst>=nCh) continue;
+    const g = fitGaussian(netData, chEst, rp.win);
+    const desv = Math.abs((roughA*g.centroid+roughB) - rp.energy);
+    if(g.area>100 && desv<20) {
+      // Solo agregar si no ya existe un punto cercano
+      const tooClose = calCh.some(c=>Math.abs(c-g.centroid)<50);
+      if(!tooClose) { calCh.push(g.centroid); calEn.push(rp.energy); }
+    }
+  }
+
+  const calFit = linearFit(calCh, calEn);
+  const {a:ca, b:cb, rms:calRms} = calFit;
+  log(`Calibración: E = ${ca.toFixed(6)}·Ch + ${cb.toFixed(4)} keV`, 'ok');
+  log(`RMS calibración: ${calRms.toFixed(4)} keV  (${calCh.length} puntos)`, calRms<5?'ok':'warn');
+  setProgress(50);
+
+  // ── Picos a analizar ──
+  const peaksToFind = [
+    {energy:238.63, name:'²¹²Pb',  parent:'²³²Th', win:25},
+    {energy:295.22, name:'²¹⁴Pb',  parent:'²²⁶Ra', win:25},
+    {energy:351.93, name:'²¹⁴Pb',  parent:'²²⁶Ra', win:25},
+    {energy:511.00, name:'e⁺',      parent:'—',     win:20},
+    {energy:583.19, name:'²⁰⁸Tl',  parent:'²³²Th', win:20},
+    {energy:609.31, name:'²¹⁴Bi',  parent:'²²⁶Ra', win:25},
+    {energy:661.66, name:'¹³⁷Cs',  parent:'—',     win:25},
+    {energy:768.36, name:'²¹⁴Bi',  parent:'²²⁶Ra', win:20},
+    {energy:911.20, name:'²²⁸Ac',  parent:'²³²Th', win:20},
+    {energy:1120.29,name:'²¹⁴Bi',  parent:'²²⁶Ra', win:25},
+    {energy:1173.23,name:'⁶⁰Co',   parent:'—',     win:25},
+    {energy:1238.11,name:'²¹⁴Bi',  parent:'²²⁶Ra', win:25},
+    {energy:1332.49,name:'⁶⁰Co',   parent:'—',     win:25},
+    {energy:1460.83,name:'⁴⁰K',    parent:'—',     win:30},
+    {energy:1764.49,name:'²¹⁴Bi',  parent:'²²⁶Ra', win:25},
+    {energy:2204.21,name:'²¹⁴Bi',  parent:'²²⁶Ra', win:25},
+    {energy:2614.51,name:'²⁰⁸Tl',  parent:'²³²Th', win:30},
+  ];
+
+  const results = [];
+  for(const pk of peaksToFind) {
+    const chEst = Math.round((pk.energy - cb)/ca);
+    if(chEst<0||chEst>=nCh) continue;
+    const g = fitGaussian(netData, chEst, pk.win);
+    const eFit = ca*g.centroid + cb;
+    const fwhmKeV = g.fwhm * ca;
+    const snr = g.areaErr>0 ? g.area/g.areaErr : 0;
+    results.push({
+      ...pk,
+      centroid: g.centroid, eFit, fwhmKeV,
+      area: g.area, areaErr: g.areaErr, snr,
+      detected: g.area>50 && snr>2
+    });
+  }
+  const detected = results.filter(r=>r.detected);
+  log(`Picos detectados: ${detected.length} de ${peaksToFind.length} buscados`, 'ok');
+  setProgress(75);
+
+  // ── GRÁFICAS ──
+  destroyCharts();
+  const channels = Array.from({length:nCh},(_,i)=>i);
+  const energyAxis = channels.map(c=>+(ca*c+cb).toFixed(2));
+
+  // Decimar para plotear (cada 4 canales)
+  const step = 4;
+  const decEn=[], decS=[], decB=[], decN=[];
+  for(let i=0;i<nCh;i+=step) {
+    decEn.push(energyAxis[i]);
+    decS.push(Math.max(0.1, S.data[i]));
+    decB.push(Math.max(0.1, B.data[i]*factor));
+    decN.push(Math.max(0.1, netData[i]));
+  }
+
+  // Filtro 50-3000 keV
+  const mask = decEn.map(e=>e>50&&e<3100);
+  const fEn=decEn.filter((_,i)=>mask[i]);
+  const fS=decS.filter((_,i)=>mask[i]);
+  const fB=decB.filter((_,i)=>mask[i]);
+  const fN=decN.filter((_,i)=>mask[i]);
+
+  // Chart 1: Raw
+  document.getElementById('section-charts1').classList.remove('hidden');
+  charts.raw = new Chart(document.getElementById('chartRaw'), {
+    type:'line',
+    data:{
+      labels:fEn,
+      datasets:[
+        {label:'Muestra', data:fS, borderColor:'#00d4ff', borderWidth:1, pointRadius:0, fill:false},
+        {label:'Fondo (norm.)', data:fB, borderColor:'#ff6b35', borderWidth:1, pointRadius:0, fill:false},
+      ]
+    },
+    options: chartOptions('Energía (keV)', 'Cuentas', true, detected)
+  });
+
+  // Chart 2: Neto
+  document.getElementById('section-charts2').classList.remove('hidden');
+  charts.net = new Chart(document.getElementById('chartNet'), {
+    type:'line',
+    data:{
+      labels:fEn,
+      datasets:[{label:'Espectro neto', data:fN, borderColor:'#00ff99', borderWidth:1, pointRadius:0, fill:true,
+        backgroundColor:'rgba(0,255,153,0.05)'}]
+    },
+    options: chartOptions('Energía (keV)', 'Cuentas netas', true, detected)
+  });
+
+  // Chart 3: Calibración
+  const calPred = calCh.map(c=>+(ca*c+cb).toFixed(2));
+  const residuals = calEn.map((e,i)=>+(e-calPred[i]).toFixed(2));
+  charts.cal = new Chart(document.getElementById('chartCal'), {
+    type:'scatter',
+    data:{
+      datasets:[
+        {label:'Puntos cal.', data:calCh.map((c,i)=>({x:c,y:calEn[i]})),
+         borderColor:'#00d4ff', backgroundColor:'#00d4ff', pointRadius:5},
+        {label:'Ajuste lineal', data:[{x:0,y:cb},{x:nCh,y:ca*nCh+cb}],
+         type:'line', borderColor:'#ffcc00', borderWidth:1.5, pointRadius:0, fill:false},
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#6b8aaa',font:{family:'Share Tech Mono',size:11}}}},
+      scales:{
+        x:{ticks:{color:'#6b8aaa',font:{family:'Share Tech Mono',size:10}},
+           grid:{color:'rgba(30,45,61,0.5)'},title:{display:true,text:'Canal',color:'#6b8aaa'}},
+        y:{ticks:{color:'#6b8aaa',font:{family:'Share Tech Mono',size:10}},
+           grid:{color:'rgba(30,45,61,0.5)'},title:{display:true,text:'Energía (keV)',color:'#6b8aaa'}}
+      }
+    }
+  });
+  setProgress(85);
+
+  // ── MÉTRICAS ──
+  document.getElementById('section-metrics').classList.remove('hidden');
+  document.getElementById('mv-lt').textContent = S.liveTime.toFixed(0);
+  document.getElementById('mv-bg').textContent = B.liveTime.toFixed(0);
+  document.getElementById('mv-cal').textContent = calRms.toFixed(4);
+  document.getElementById('mv-net').textContent = totalNet.toFixed(0);
+  document.getElementById('mv-peaks').textContent = detected.length;
+  ['mc-cal','mc-net','mc-peaks'].forEach(id=>document.getElementById(id).classList.add('active'));
+
+  // ── TABLA CALIBRACIÓN ──
+  document.getElementById('cal-eq').textContent =
+    `E(keV) = ${ca.toFixed(6)} · Canal + ${cb.toFixed(4)}   |   RMS = ${calRms.toFixed(4)} keV`;
+  const calTbody = document.getElementById('calTableBody');
+  calTbody.innerHTML = '';
+  calCh.forEach((ch,i)=>{
+    const ePred = +(ca*ch+cb).toFixed(2);
+    const resid = +(calEn[i]-ePred).toFixed(2);
+    const absR = Math.abs(resid);
+    const badge = absR<2?'ok':absR<10?'warn':'bad';
+    const label = absR<2?'EXCELENTE':absR<10?'ACEPTABLE':'REVISAR';
+    calTbody.innerHTML += `<tr>
+      <td>${i+1}</td><td>${ch.toFixed(1)}</td>
+      <td>${calEn[i].toFixed(2)}</td><td>${ePred}</td>
+      <td style="color:${resid>=0?'#00ff99':'#ff6b35'}">${resid>0?'+':''}${resid}</td>
+      <td><span class="badge badge-${badge}">${label}</span></td>
+    </tr>`;
+  });
+  document.getElementById('section-caltable').classList.remove('hidden');
+
+  // ── PEAK CARDS ──
+  const peaksGrid = document.getElementById('peaksGrid');
+  peaksGrid.innerHTML = '';
+  const peakTbody = document.getElementById('peakTableBody');
+  peakTbody.innerHTML = '';
+  for(const r of results) {
+    if(!r.detected) continue;
+    const snrLabel = r.snr>5?'ALTO':r.snr>2?'MEDIO':'BAJO';
+    const snrBadge = r.snr>5?'ok':r.snr>2?'warn':'bad';
+    peaksGrid.innerHTML += `
+    <div class="peak-card">
+      <div class="peak-nuclide">${r.name}</div>
+      <div class="peak-parent">Serie: ${r.parent}</div>
+      <div class="peak-stat"><span class="peak-stat-label">E real</span><span class="peak-stat-val">${r.energy.toFixed(2)} keV</span></div>
+      <div class="peak-stat"><span class="peak-stat-label">E ajustada</span><span class="peak-stat-val">${r.eFit.toFixed(2)} keV</span></div>
+      <div class="peak-stat"><span class="peak-stat-label">FWHM</span><span class="peak-stat-val">${r.fwhmKeV.toFixed(2)} keV</span></div>
+      <div class="peak-stat"><span class="peak-stat-label">Área neta</span><span class="peak-stat-val">${r.area.toFixed(0)} cts</span></div>
+      <div class="peak-stat"><span class="peak-stat-label">SNR</span><span class="peak-stat-val">${r.snr.toFixed(1)}</span></div>
+      <div style="margin-top:8px"><span class="badge badge-${snrBadge}">${snrLabel}</span></div>
+    </div>`;
+
+    peakTbody.innerHTML += `<tr>
+      <td>${r.name}</td><td>${r.parent}</td>
+      <td>${r.energy.toFixed(2)}</td><td>${r.eFit.toFixed(2)}</td>
+      <td>${r.centroid.toFixed(1)}</td><td>${r.fwhmKeV.toFixed(2)}</td>
+      <td>${r.area.toFixed(0)}</td><td>±${r.areaErr.toFixed(0)}</td>
+      <td><span class="badge badge-${r.snr>5?'ok':r.snr>2?'warn':'bad'}">${snrLabel}</span></td>
+    </tr>`;
+  }
+  document.getElementById('section-peaks').classList.remove('hidden');
+  document.getElementById('section-peaktable').classList.remove('hidden');
+
+  setProgress(100);
+  setStatus('ANÁLISIS COMPLETO', true);
+  log('─────────────────────────────────', 'info');
+  log('Análisis completado exitosamente.', 'ok');
+  document.getElementById('btnAnalyze').disabled = false;
+}
+
+// ═══════════════════════════════════════════════════
+// CHART OPTIONS
+// ═══════════════════════════════════════════════════
+function chartOptions(xLabel, yLabel, logScale, peaks=[]) {
+  const annotations = {};
+  peaks.forEach((p,i)=>{
+    annotations[`peak${i}`] = {
+      type:'line', xMin:p.energy, xMax:p.energy,
+      borderColor:'rgba(255,107,53,0.5)', borderWidth:1,
+      label:{content:p.name, enabled:true, color:'#ff6b35',
+             font:{family:'Share Tech Mono',size:9}, position:'start'}
+    };
+  });
+  return {
+    responsive:true, maintainAspectRatio:false,
+    animation:{duration:600},
+    plugins:{
+      legend:{labels:{color:'#6b8aaa',font:{family:'Share Tech Mono',size:11},boxWidth:20}},
+    },
+    scales:{
+      x:{
+        type:'linear',
+        ticks:{color:'#6b8aaa',font:{family:'Share Tech Mono',size:9},maxTicksLimit:12,
+               callback:v=>v+' keV'},
+        grid:{color:'rgba(30,45,61,0.5)'},
+        title:{display:true,text:xLabel,color:'#6b8aaa',font:{family:'Share Tech Mono',size:10}}
+      },
+      y:{
+        type: logScale ? 'logarithmic' : 'linear',
+        ticks:{color:'#6b8aaa',font:{family:'Share Tech Mono',size:9}},
+        grid:{color:'rgba(30,45,61,0.5)'},
+        title:{display:true,text:yLabel,color:'#6b8aaa',font:{family:'Share Tech Mono',size:10}}
+      }
+    }
+  };
+}
+
+function destroyCharts() {
+  Object.values(charts).forEach(c=>{ if(c) c.destroy(); });
+  charts = {};
+}
+</script>
+</body>
+</html>
