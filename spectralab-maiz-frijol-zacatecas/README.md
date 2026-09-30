@@ -52,32 +52,6 @@ python -m http.server 8000
 
 Después, abre <http://localhost:8000>.
 
-## Publicación en GitHub
-
-1. Crea un repositorio vacío en GitHub, por ejemplo `spectralab-maiz-frijol-zacatecas`.
-2. Desde esta carpeta ejecuta:
-
-```bash
-git init
-git add .
-git commit -m "Primera versión de SpectraLab"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/spectralab-maiz-frijol-zacatecas.git
-git push -u origin main
-```
-
-Para activar GitHub Pages: **Settings → Pages → Deploy from a branch → main → / (root)**.
-
-## Estructura
-
-```text
-.
-├── index.html
-├── README.md
-└── docs/
-    └── metodologia.md
-```
-
 ## Archivos necesarios para el análisis
 
 Para usar el analizador se recomienda cargar tres archivos: **muestra**, **fondo** y **estándar de calibración**. La muestra contiene el espectro de maíz o frijol; el fondo permite eliminar contribuciones ambientales; el estándar proporciona energías gamma conocidas para validar la relación canal–energía. Los formatos aceptados son `.mca` y `.txt` con una sección `<<DATA>>` y, cuando sea posible, `<<CALIBRATION>>`.
